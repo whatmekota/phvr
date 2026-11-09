@@ -43,6 +43,7 @@ While the plugin is on and playhound is open, the headset can browse your librar
 The port is 6969, the one playhound's phone remote uses. Bookmark the address in the player: it stays the same.
 
 - **What is shared:** videos with scripts, by default. Or all videos, or only the playlists you tick in the panel. They're listed by title, then your starred ones, then a list per playlist.
+- The links in what the headset gets use the address the headset reached playhound by, so a computer with VPN or virtual network adapters still hands out one that works.
 - Videos stream from playhound with seeking. Each video's link is a random address that stops working when the plugin is switched off; nothing else on your disk can be reached.
 - **The VR format** comes from the file name, using DeoVR's naming flags (`_180`, `_360`, `_LR`/`_SBS`/`_3DH`, `_TB`/`_3DV`, `_FISHEYE`, `_FISHEYE190`, `_MKX200`, `_VRCA220`…). A name without one is a flat video. Each player lets you change it while watching.
 - **Thumbnails** are taken from each video the first time the headset asks, and kept. An audio file gets a card with its title.

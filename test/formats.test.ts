@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { deoVrLibrary, deoVrVideo, hereSphereLibrary, hereSphereVideo, numericId } from '../src/formats.ts'
 import { readConfig } from '../src/settings.ts'
-import { createLibraryServer, groupsOf, scriptAxes, selectShared } from '../src/server.ts'
+import { createLibraryServer, groupsOf, scriptAxes, selectShared, viaHost } from '../src/server.ts'
 import { deoVrFormat, guessFormat, hereSphereFormat } from '../src/vrformat.ts'
 
 describe('VR format from the file name', () => {
@@ -119,13 +119,13 @@ const lib = [
   video('No script.mp4', { hasScript: false, playlists: ['Evening'] }),
 ]
 
-function req(path: string, method = 'POST', body?: unknown): HttpRequest {
+function req(path: string, method = 'POST', body?: unknown, headers: Record<string, string> = {}): HttpRequest {
   const bytes = body === undefined ? null : new TextEncoder().encode(JSON.stringify(body))
   return {
     method,
     path,
     query: {},
-    headers: {},
+    headers,
     body: bytes,
     remote: '192.168.1.50',
     text: () => (bytes ? new TextDecoder().decode(bytes) : ''),
@@ -259,5 +259,32 @@ describe('the server', () => {
     assert.equal(server.own('http://192.168.1.10:6970/plugins/phvr/heresphere/B%20clip.mp4'), 'B clip.mp4')
     assert.equal(server.own('http://192.168.1.10:6970/plugins/phvr/deovr/A%20clip_180_LR.mp4'), 'A clip_180_LR.mp4')
     assert.equal(server.own('/sdcard/B clip.mp4'), null)
+  })
+
+  it('links use the host the headset reached us by', async () => {
+    const { server } = makeServer()
+    const host = { host: '10.0.0.7:6969' }
+    const l = (await server.handle(req('/heresphere', 'POST', {}, host)))!.json as { library: { list: string[] }[] }
+    assert.equal(l.library[0].list[0], 'http://10.0.0.7:6969/plugins/phvr/heresphere/A%20clip_180_LR.mp4')
+    const v = (await server.handle(req('/heresphere/B%20clip.mp4', 'POST', {}, host)))!.json as ReturnType<typeof hereSphereVideo>
+    assert.match(v.media[0].sources[0].url, /^http:\/\/10\.0\.0\.7:6969\/ph-files\//)
+    assert.match(v.scripts![0].url, /^http:\/\/10\.0\.0\.7:6969\/ph-files\//)
+    assert.match(v.thumbnailImage, /^http:\/\/10\.0\.0\.7:6969\/plugins\/phvr\/thumb\//)
+    // still known as ours
+    assert.equal(server.own(v.media[0].sources[0].url), 'B clip.mp4')
+  })
+})
+
+describe('the Host header', () => {
+  it('replaces the origin of a link', () => {
+    assert.equal(viaHost('http://192.168.80.1:6969/ph-files/t/a.mp4', '192.168.0.5:6969'), 'http://192.168.0.5:6969/ph-files/t/a.mp4')
+    assert.equal(viaHost('http://a:1/x', 'pc.local'), 'http://pc.local/x')
+    assert.equal(viaHost('http://a:1/x', '[fe80::1]:6969'), 'http://[fe80::1]:6969/x')
+  })
+
+  it('ignores a missing or odd one', () => {
+    assert.equal(viaHost('http://a:1/x', undefined), 'http://a:1/x')
+    assert.equal(viaHost('http://a:1/x', 'evil/path'), 'http://a:1/x')
+    assert.equal(viaHost('http://a:1/x', 'a b'), 'http://a:1/x')
   })
 })

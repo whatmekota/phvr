@@ -46,6 +46,8 @@ export class FakeHeadset {
   private clients = new Set<Socket>()
   private timer: ReturnType<typeof setInterval> | null = null
   path: string
+  /** HereSphere's: the video's address in a web API, when it was opened from one. */
+  identifier: string | null = null
   duration: number
   rate = 1
   playing = true
@@ -87,8 +89,11 @@ export class FakeHeadset {
   status() {
     if (!this.path)
       return { path: '', currentTime: 0, playbackSpeed: 1, playerState: 1, duration: 0 }
+    const hs = this.opts.player === 'heresphere'
     return {
       path: this.path,
+      // HereSphere (v0.11.0+) also says what it actually plays, and where from.
+      ...(hs ? { resource: this.path, identifier: this.identifier ?? '' } : {}),
       currentTime: Math.round(this.time * 1000) / 1000,
       playbackSpeed: this.rate,
       playerState: this.playing ? 0 : 1,
@@ -123,8 +128,9 @@ export class FakeHeadset {
     this.broadcast()
   }
 
-  load(path: string, duration = this.duration) {
+  load(path: string, duration = this.duration, identifier: string | null = null) {
     this.path = path
+    this.identifier = identifier
     this.duration = duration
     this.base = 0
     this.baseAt = Date.now()

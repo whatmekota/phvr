@@ -107,7 +107,7 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
     }
   })
   player.addEventListener('change', () => m.set('player', player.value))
-  const connBtn = h('button', { class: 'phvr-btn phvr-primary', type: 'button' })
+  const connBtn = h('button', { class: 'phvr-btn', type: 'button' })
   connBtn.addEventListener('click', () => {
     save()
     if (m.link.kind === 'off')
@@ -119,8 +119,8 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
   const retry = h('button', { class: 'phvr-link', type: 'button', onclick: () => m.retry() }, 'Try now')
   conn.append(
     h('h3', {}, 'Headset'),
-    h('div', { class: 'phvr-row' }, player, host, connBtn),
-    connState,
+    h('div', { class: 'phvr-row' }, player, host),
+    h('div', { class: 'phvr-row phvr-conn' }, connState, connBtn),
   )
 
   function renderConn() {
@@ -131,6 +131,7 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
     if (document.activeElement !== player)
       player.value = m.cfg.player
     connBtn.textContent = l.kind === 'off' ? 'Connect' : 'Disconnect'
+    connBtn.classList.toggle('phvr-primary', l.kind === 'off')
     connBtn.disabled = !m.socketAvailable
     host.disabled = !m.socketAvailable
     connState.replaceChildren()
@@ -146,7 +147,7 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
     else if (l.kind === 'connected')
       connState.append(dot('on'), `Connected to ${name} at ${m.cfg.host}`)
     else
-      connState.append(dot('bad'), `Can't reach ${name} at ${m.cfg.host}: ${l.error}. Trying again in ${Math.max(1, Math.round((l.at - Date.now()) / 1000))} s. `, retry)
+      connState.append(dot('bad'), `Can't reach ${name}: ${l.error.replace(/\.$/, '')}. Trying again in ${Math.max(1, Math.round((l.at - Date.now()) / 1000))} s. `, retry)
   }
 
   // ─── What plays in the headset ──────────────────────────────────────────
@@ -213,7 +214,10 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
       rows.push(h('p', { class: 'phvr-muted' }, 'Looking for it in your library…'))
     }
     else if (f.phase === 'following') {
-      rows.push(h('div', { class: 'phvr-match' }, h('span', { class: 'phvr-dot phvr-on' }), h('span', {}, `Following `, h('b', {}, title ?? 'it'), f.how ? h('span', { class: 'phvr-muted' }, ` (${HOW[f.how] ?? f.how})`) : '')))
+      const here = m.link.kind === 'connected'
+      rows.push(h('div', { class: 'phvr-match' }, h('span', { class: `phvr-dot ${here ? 'phvr-on' : 'phvr-wait'}` }), h('span', {}, `Following `, h('b', {}, title ?? 'it'), f.how ? h('span', { class: 'phvr-muted' }, ` (${HOW[f.how] ?? f.how})`) : '')))
+      if (!here)
+        rows.push(h('p', { class: 'phvr-warn' }, `The device is stopped until ${name} is back.`))
       rows.push(h('button', { class: 'phvr-link', type: 'button', onclick: () => void openPicker() }, 'Not this video?'))
     }
     else if (f.phase === 'dismissed') {
@@ -284,7 +288,7 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
 
   function copyRow(label: string, url: string) {
     return h('div', { class: 'phvr-addr' },
-      h('span', { class: 'phvr-muted' }, label),
+      h('span', { class: 'phvr-muted phvr-addr-label' }, `Open in ${label}`),
       h('code', { class: 'phvr-url' }, url),
       h('button', {
         class: 'phvr-link',

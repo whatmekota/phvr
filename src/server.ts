@@ -43,6 +43,18 @@ export interface LibraryServer {
 }
 
 const key = (id: string) => encodeURIComponent(id)
+
+/**
+ * A link with the host the headset reached us by. playhound builds links
+ * from this computer's first network address, which on a machine with VPN
+ * or virtual adapters may not be the one the headset can reach; the Host
+ * header of its own request is (XBVR and XTP build their links from it too).
+ */
+export function viaHost(url: string, host: string | undefined): string {
+  if (!host || !/^[\w.-]+(?::\d{1,5})?$|^\[[\da-f:.]+\](?::\d{1,5})?$/i.test(host))
+    return url
+  return url.replace(/^(https?:\/\/)[^/]+/i, `$1${host}`)
+}
 function unkey(k: string): string | null {
   try {
     return decodeURIComponent(k)
@@ -140,7 +152,7 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
     }
   }
 
-  async function mediaOf(v: LibraryVideo, withMedia: boolean): Promise<VideoMedia> {
+  async function mediaOf(v: LibraryVideo, withMedia: boolean, host?: string): Promise<VideoMedia> {
     const info = await d.info(v.id).catch(() => null)
     const scripts: VideoMedia['scripts'] = []
     if (v.hasScript) {
@@ -151,10 +163,11 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
         }
         catch {}
         if (url)
-          scripts.push({ name: `${stem(v.id)}${axis ? `.${axis}` : ''}.funscript`, url })
+          scripts.push({ name: `${stem(v.id)}${axis ? `.${axis}` : ''}.funscript`, url: viaHost(url, host) })
       }
     }
-    return { mediaUrl: withMedia ? await media(v.id) : null, scripts }
+    const mediaUrl = withMedia ? await media(v.id) : null
+    return { mediaUrl: mediaUrl && viaHost(mediaUrl, host), scripts }
   }
 
   /** One of the shared videos, by the key in a path; null when it isn't shared (or gone). */
@@ -166,9 +179,11 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
   }
 
   async function handle(req: HttpRequest): Promise<HttpResponse | null> {
-    const base = d.base()
-    if (!base || !d.config().share)
+    const served = d.base()
+    if (!served || !d.config().share)
       return null
+    const host = req.headers.host
+    const base = viaHost(served, host)
     const path = req.path.replace(/\/+$/, '') || '/'
     const parts = path.split('/').filter(Boolean)
 
@@ -195,7 +210,7 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
       catch {}
       // HereSphere listing the library says it needs no media.
       const withMedia = body?.needsMediaSource !== false
-      return { headers: HERESPHERE_HEADERS, json: hereSphereVideo(facts(v, 'heresphere', base), await mediaOf(v, withMedia)) }
+      return { headers: HERESPHERE_HEADERS, json: hereSphereVideo(facts(v, 'heresphere', base), await mediaOf(v, withMedia, host)) }
     }
 
     if (parts[0] === 'deovr') {
@@ -209,7 +224,7 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
       if (!v)
         return null
       d.onRequest?.('video', req.remote)
-      return { json: deoVrVideo(facts(v, 'deovr', base), await mediaOf(v, true)) }
+      return { json: deoVrVideo(facts(v, 'deovr', base), await mediaOf(v, true, host)) }
     }
 
     if (parts[0] === 'thumb' && parts.length === 2 && d.config().thumbnails) {
