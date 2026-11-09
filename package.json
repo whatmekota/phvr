@@ -1,0 +1,20 @@
+{
+  "name": "phvr",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:public": "node build.mjs --public --minify",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "fake-headset": "node --import tsx dev/fake-headset.ts"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "description": "phvr: follow a video playing in HereSphere or DeoVR and drive your devices from playhound; and browse your library from the headset.",
+  "license": "MIT"
+}

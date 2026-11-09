@@ -1,0 +1,14 @@
+{
+  "id": "phvr",
+  "name": "VR headset",
+  "version": "0.1.0",
+  "description": "Follow a video playing in HereSphere or DeoVR and drive your devices from playhound, and browse your library from the headset.",
+  "author": "whatmekota",
+  "main": "dist/index.js",
+  "api": 3,
+  "permissions": ["library", "external", "socket", "serve"],
+  "longDescription": "Watch in your VR headset, and let playhound drive your devices.\n\n- **Follows HereSphere and DeoVR** over their timestamp server: the video playing in the headset is matched to your library, and its scripts play on every device to the headset's clock, with your latency, offsets, intensity and edges. Pausing, seeking and speed follow; playhound's own play, pause and seek go back to the headset.\n- **Your library in the headset**, XTP-style: HereSphere's web API and DeoVR's JSON, served from playhound's network server. Browse and play there, scripts included, so HereSphere shows the heatmap.\n- Shares videos with scripts by default, or all of them, or chosen playlists.\n\nNeeds the playhound desktop app, and the headset on the same network.",
+  "category": "sync",
+  "keywords": ["vr", "heresphere", "deovr", "quest", "headset", "sync", "xtp", "timestamp", "library"],
+  "minPlayhound": "2.2.0"
+}
