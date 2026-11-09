@@ -35,18 +35,18 @@ In **Settings → Plugins → VR headset**: the player, the headset's address, *
 
 ## Your library in the headset
 
-While the plugin is on and playhound is open, the headset can browse your library in the player's own format, the way XTP serves it: **HereSphere's web API** and **DeoVR's JSON**. The panel shows the address to open; the help page at the plugin's address (in any browser) names both.
+While the plugin is on and playhound is open, the headset can browse your library in the player's own format, the way XTP serves it: **HereSphere's web API** and **DeoVR's JSON**. The panel shows the address to open, with Copy.
 
-- **HereSphere:** open its web browser, type `http://<this computer>:<port>/plugins/phvr/heresphere` and open it. HereSphere shows the videos as its library. Its scripts load in HereSphere too, so its heatmap shows; with the headset connected above, playhound drives your device.
-- **DeoVR:** open its browser and type `http://<this computer>:<port>/plugins/phvr/deovr`. DeoVR lists the videos and plays them.
+- **HereSphere:** open its web browser and go to `http://<this computer>:6969/heresphere`. HereSphere shows the videos as its library. Its scripts load in HereSphere too, so its heatmap shows; with the headset connected above, playhound drives your device.
+- **DeoVR:** open its browser and go to `http://<this computer>:6969/deovr`. DeoVR lists the videos and plays them.
 
-The port is 6969, the one playhound's phone remote uses. Bookmark the address in the player: it stays the same.
+6969 is the port playhound's phone remote uses too. Bookmark the address in the player: it stays the same. If another plugin already holds those short addresses, the panel gives the longer `…/plugins/phvr/heresphere` (or `/deovr`) instead. A computer with several network adapters (Wi-Fi, Ethernet, a VPN, a virtual machine's) has an address on each: the panel shows the likeliest first and lists the others in case the headset can't reach it.
 
 - **What is shared:** videos with scripts, by default. Or all videos, or only the playlists you tick in the panel. They're listed by title, then your starred ones, then a list per playlist.
 - The links in what the headset gets use the address the headset reached playhound by, so a computer with VPN or virtual network adapters still hands out one that works.
 - Videos stream from playhound with seeking. Each video's link is a random address that stops working when the plugin is switched off; nothing else on your disk can be reached.
 - **The VR format** comes from the file name, using DeoVR's naming flags (`_180`, `_360`, `_LR`/`_SBS`/`_3DH`, `_TB`/`_3DV`, `_FISHEYE`, `_FISHEYE190`, `_MKX200`, `_VRCA220`…). A name without one is a flat video. Each player lets you change it while watching.
-- **Thumbnails** are taken from each video the first time the headset asks, and kept. An audio file gets a card with its title.
+- **Thumbnails** are the library's own. The headset also gets each video's length, picture size and file size, read by playhound from the file when it doesn't know them yet.
 - **Anyone on your network who knows the address can browse what is shared**, while playhound is open. Switch **Share the library with the headset** off in the settings when you don't want that.
 
 ## It won't connect?
@@ -61,7 +61,7 @@ The port is 6969, the one playhound's phone remote uses. Bookmark the address in
 
 - It connects only to the address you type, and only on your local network (playhound refuses anything else).
 - The library is answered only on your local network, only while the plugin is on and **Share the library** is on, and only what you chose to share.
-- It stores its settings, your picks (headset file → library video) and the thumbnails, in playhound. It sends nothing anywhere else.
+- It stores its settings and your picks (headset file → library video) in playhound. It sends nothing anywhere else.
 
 ## Build
 

@@ -37,8 +37,10 @@ export const CSS = `
 .phvr-pick:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .phvr-cand { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .phvr-pick-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.phvr-addr { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; margin: 10px 0 4px; }
-.phvr-addr-label { grid-column: 1 / -1; }
+.phvr-addr { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 4px; }
+.phvr-addr-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.phvr-more summary { cursor: pointer; color: var(--accent); margin-top: 2px; }
+.phvr-more[open] { display: flex; flex-direction: column; gap: 4px; }
 .phvr-url { font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; padding: 5px 7px; border-radius: 6px; background: var(--bg-900, rgba(0,0,0,.2)); border: 1px solid var(--border); overflow-wrap: anywhere; user-select: all; }
 .phvr-steps { margin: 6px 0; padding-left: 20px; list-style: decimal; }
 .phvr-steps li { margin: 2px 0; }

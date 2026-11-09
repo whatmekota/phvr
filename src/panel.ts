@@ -2,6 +2,7 @@ import type { FollowView } from './follow'
 import type { LinkState } from './link'
 import type { Config } from './settings'
 import type { LibraryVideo } from './types'
+import { playerAddress } from './addresses'
 import { fileNameOf } from './match'
 import { PLAYER_NAMES } from './settings'
 
@@ -20,6 +21,10 @@ export interface Model {
   readonly link: LinkState
   readonly follow: FollowView
   readonly base: string | null
+  /** The plugin's address on every network adapter (http.urls()), best first. */
+  readonly urls: string[]
+  /** The root paths it holds: 'heresphere', 'deovr'. */
+  readonly aliases: string[]
   readonly shareError: string | null
   readonly sharedCount: number | null
   readonly lastVisit: Visit | null
@@ -286,9 +291,8 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
     }))
   }
 
-  function copyRow(label: string, url: string) {
-    return h('div', { class: 'phvr-addr' },
-      h('span', { class: 'phvr-muted phvr-addr-label' }, `Open in ${label}`),
+  function urlRow(url: string) {
+    return h('div', { class: 'phvr-addr-row' },
       h('code', { class: 'phvr-url' }, url),
       h('button', {
         class: 'phvr-link',
@@ -298,11 +302,33 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
     )
   }
 
+  /** The address for this player on this computer's best adapter, and the others for when it can't be reached. */
+  function addresses() {
+    const kind = m.cfg.player
+    const label = PLAYER_NAMES[kind]
+    const all = [...new Set(m.urls.map(u => playerAddress(u, kind, m.aliases)))]
+    const [first, ...rest] = all
+    const box = h('div', { class: 'phvr-addr' },
+      h('span', { class: 'phvr-muted' }, `Open in ${label}`),
+      first ? urlRow(first) : '',
+    )
+    if (!m.aliases.includes(kind))
+      box.append(h('p', { class: 'phvr-muted' }, `Another plugin has the short address (/${kind}), so it's this longer one.`))
+    if (rest.length) {
+      box.append(h('details', { class: 'phvr-more' },
+        h('summary', {}, `The headset can't open it? This computer has ${rest.length} other address${rest.length === 1 ? '' : 'es'}`),
+        h('p', { class: 'phvr-muted' }, 'Try the one on the same network as the headset (often 192.168.x.x). VPN and virtual machine adapters won\'t work.'),
+        ...rest.map(urlRow),
+      ))
+    }
+    return box
+  }
+
   let libKey = ''
   function renderLib() {
     // Only when something it shows changed: the status ticks every second, and a select being rebuilt would close.
     const v0 = m.lastVisit
-    const key = JSON.stringify([m.httpAvailable, m.cfg.share, m.cfg.shareWhat, m.cfg.playlists, m.cfg.player, m.base, m.shareError, m.sharedCount, v0?.remote, v0 ? Math.floor(v0.at / 30000) : 0])
+    const key = JSON.stringify([m.httpAvailable, m.cfg.share, m.cfg.shareWhat, m.cfg.playlists, m.cfg.player, m.base, m.urls, m.aliases, m.shareError, m.sharedCount, v0?.remote, v0 ? Math.floor(v0.at / 30000) : 0])
     if (key === libKey)
       return
     libKey = key
@@ -333,7 +359,7 @@ export function mountPanel(el: HTMLElement, m: Model): () => void {
     libBody.replaceChildren(
       h('div', { class: 'phvr-row' }, h('span', { class: 'phvr-muted' }, 'Shares'), what, h('span', { class: 'phvr-muted phvr-num' }, n === null ? '' : `${n} video${n === 1 ? '' : 's'}`)),
       m.cfg.shareWhat === 'playlists' ? playlistBox : '',
-      m.cfg.player === 'heresphere' ? copyRow('HereSphere', `${m.base}heresphere`) : copyRow('DeoVR', `${m.base}deovr`),
+      addresses(),
       h('ol', { class: 'phvr-steps' }, ...(m.cfg.player === 'heresphere'
         ? [
             h('li', {}, 'In HereSphere, open its web browser (the globe).'),

@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { deoVrLibrary, deoVrVideo, hereSphereLibrary, hereSphereVideo, numericId } from '../src/formats.ts'
 import { readConfig } from '../src/settings.ts'
+import { originOf, playerAddress } from '../src/addresses.ts'
 import { createLibraryServer, groupsOf, scriptAxes, selectShared, viaHost } from '../src/server.ts'
+import { fromLibrary } from '../src/thumbs.ts'
 import { deoVrFormat, guessFormat, hereSphereFormat } from '../src/vrformat.ts'
 
 describe('VR format from the file name', () => {
@@ -41,6 +43,9 @@ const facts = {
   title: 'Synthetic Clip_180_LR',
   fileName: 'Synthetic Clip_180_LR.mp4',
   durationS: 600.4,
+  width: 3840,
+  height: 1920,
+  sizeBytes: 123456789,
   starred: true,
   tags: ['test'],
   playlists: ['Evening'],
@@ -60,7 +65,7 @@ describe('HereSphere\'s web API', () => {
     assert.equal(v.stereo, 'sbs')
     assert.equal(v.isFavorite, true)
     assert.deepEqual(v.scripts, [{ name: 'clip.funscript', url: 'http://h/ph-files/s/clip.funscript' }])
-    assert.equal(v.media[0].sources[0].url, 'http://h/ph-files/t/clip.mp4')
+    assert.deepEqual(v.media[0].sources[0], { resolution: 1920, height: 1920, width: 3840, size: 123456789, url: 'http://h/ph-files/t/clip.mp4' })
     assert.deepEqual(v.tags, [{ name: 'Category:test' }, { name: 'Playlist:Evening' }])
     assert.equal(v.writeFavorite, false)
   })
@@ -87,7 +92,10 @@ describe('DeoVR\'s JSON', () => {
     assert.equal(v.stereoMode, 'sbs')
     assert.equal(v.isScripted, true)
     assert.deepEqual(v.fleshlight, [{ title: 'clip.funscript', url: 'http://h/s' }])
-    assert.equal(v.encodings[0].videoSources[0].url, 'http://h/ph-files/t/clip.mp4')
+    assert.deepEqual(v.encodings[0].videoSources[0], { resolution: 1920, height: 1920, width: 3840, size: 123456789, url: 'http://h/ph-files/t/clip.mp4' })
+    // unknown sizes: a 1080 label, nothing made up
+    const bare = deoVrVideo({ ...facts, width: null, height: null, sizeBytes: null }, { mediaUrl: 'http://h/x', scripts: [] })
+    assert.deepEqual(bare.encodings[0].videoSources[0], { resolution: 1080, url: 'http://h/x' })
     assert.equal(v.id, numericId(facts.id))
     assert.ok(v.id > 0 && Number.isInteger(v.id))
   })
@@ -100,6 +108,9 @@ const video = (id: string, o: Partial<LibraryVideo> = {}): LibraryVideo => ({
   title: id.replace(/\.[^.]+$/, ''),
   path: `Videos/${id}`,
   durationS: 120,
+  width: null,
+  height: null,
+  sizeBytes: null,
   hasScript: true,
   starred: false,
   intensity: null,
@@ -133,10 +144,12 @@ function req(path: string, method = 'POST', body?: unknown, headers: Record<stri
   }
 }
 
-function makeServer(settings: Record<string, unknown> = {}) {
+function makeServer(settings: Record<string, unknown> = {}, o: { aliases?: string[], thumb?: Blob | string | null } = {}) {
   const asked: string[] = []
   const server = createLibraryServer({
     base: () => 'http://192.168.1.10:6970/plugins/phvr/',
+    aliases: () => o.aliases ?? [],
+    media: async id => (id === 'B clip.mp4' ? { durationS: 61.5, width: 1920, height: 1080, sizeBytes: 5000 } : null),
     list: async () => lib,
     config: () => readConfig(settings),
     mediaUrl: async id => `http://192.168.1.10:6970/ph-files/TOKEN${lib.findIndex(v => v.id === id)}abcdefghijklm/${encodeURIComponent(id)}`,
@@ -146,7 +159,7 @@ function makeServer(settings: Record<string, unknown> = {}) {
       return `http://192.168.1.10:6970/ph-files/S${id.length}${axis ?? ''}abcdefghijklmnop/${encodeURIComponent(id)}.funscript`
     },
     info: async id => ({ tags: [], sourceUrl: null, creator: null, scriptFiles: id === 'B clip.mp4' ? ['B clip.funscript', 'B clip.twist.funscript', 'B clip.weird.funscript'] : [] }),
-    thumbnail: async () => new Blob([new Uint8Array([0xFF, 0xD8, 0xFF])], { type: 'image/jpeg' }),
+    thumbnail: async () => (o.thumb !== undefined ? o.thumb : new Blob([new Uint8Array([0xFF, 0xD8, 0xFF])], { type: 'image/jpeg' })),
     onRequest: what => asked.push(what),
   })
   return { server, asked }
@@ -196,6 +209,10 @@ describe('the server', () => {
     assert.deepEqual(v.scripts!.map(s => s.name), ['B clip.funscript', 'B clip.twist.funscript'])
     assert.match(v.media[0].sources[0].url, /ph-files\/TOKEN0/)
     assert.equal(v.projection, 'perspective')
+    // sizes read by library.media, since the list didn't know them; the list's own length is kept
+    assert.equal(v.duration, 120000)
+    const src = v.media[0].sources[0]
+    assert.deepEqual([src.width, src.height, src.size, src.resolution], [1920, 1080, 5000, 1080])
     // and the stream link is then known as ours
     assert.equal(server.own(v.media[0].sources[0].url), 'B clip.mp4')
   })
@@ -246,6 +263,29 @@ describe('the server', () => {
     assert.equal(l.scenes[0].list[0].thumbnailUrl, '')
   })
 
+  it('a provided video\'s thumbnail sends the headset to its source', async () => {
+    const { server } = makeServer({}, { thumb: 'https://stash.example/scene/1/screenshot' })
+    const r = (await server.handle(req('/thumb/B%20clip.mp4.jpg', 'GET')))!
+    assert.equal(r.status, 302)
+    assert.equal(r.headers!.Location, 'https://stash.example/scene/1/screenshot')
+    const none = makeServer({}, { thumb: null })
+    assert.equal(await none.server.handle(req('/thumb/B%20clip.mp4.jpg', 'GET')), null)
+  })
+
+  it('the page names the short addresses when playhound gave us the root paths', async () => {
+    const { server } = makeServer({}, { aliases: ['heresphere', 'deovr'] })
+    const body = String((await server.handle(req('/', 'GET', undefined, { host: '192.168.0.5:6969' })))!.body)
+    assert.match(body, /http:\/\/192\.168\.0\.5:6969\/heresphere</)
+    assert.match(body, /http:\/\/192\.168\.0\.5:6969\/deovr</)
+  })
+
+  it('the root paths are answered as our own', async () => {
+    // playhound hands /deovr to us as /deovr, the same path as under /plugins/phvr/.
+    const { server } = makeServer({}, { aliases: ['deovr'] })
+    const l = (await server.handle(req('/deovr', 'GET')))!.json as ReturnType<typeof deoVrLibrary>
+    assert.equal(l.scenes[0].list.length, 2)
+  })
+
   it('a page for a normal browser, naming both addresses', async () => {
     const { server } = makeServer()
     const r = (await server.handle(req('/', 'GET')))!
@@ -286,5 +326,32 @@ describe('the Host header', () => {
     assert.equal(viaHost('http://a:1/x', undefined), 'http://a:1/x')
     assert.equal(viaHost('http://a:1/x', 'evil/path'), 'http://a:1/x')
     assert.equal(viaHost('http://a:1/x', 'a b'), 'http://a:1/x')
+  })
+})
+
+describe('the address to type in the headset', () => {
+  const base = 'http://192.168.0.5:6969/plugins/phvr/'
+  it('the short root path when playhound gave it to us', () => {
+    assert.equal(originOf(base), 'http://192.168.0.5:6969')
+    assert.equal(playerAddress(base, 'deovr', ['deovr', 'heresphere']), 'http://192.168.0.5:6969/deovr')
+    assert.equal(playerAddress(base, 'heresphere', ['heresphere']), 'http://192.168.0.5:6969/heresphere')
+  })
+  it('our own path when another plugin holds it', () => {
+    assert.equal(playerAddress(base, 'deovr', ['heresphere']), 'http://192.168.0.5:6969/plugins/phvr/deovr')
+    assert.equal(playerAddress('http://h:1/plugins/phvr', 'heresphere', []), 'http://h:1/plugins/phvr/heresphere')
+  })
+})
+
+describe('the library\'s thumbnail', () => {
+  it('a data: URL is read into a JPEG', async () => {
+    const t = await fromLibrary('data:image/jpeg;base64,/9j/4AAQ')
+    assert.ok(t instanceof Blob)
+    assert.equal((t as Blob).type, 'image/jpeg')
+    assert.deepEqual([...new Uint8Array(await (t as Blob).arrayBuffer())].slice(0, 2), [0xFF, 0xD8])
+  })
+  it('an http(s) one is passed on, anything else is nothing', async () => {
+    assert.equal(await fromLibrary('https://x/y.jpg'), 'https://x/y.jpg')
+    assert.equal(await fromLibrary('file:///c:/x.jpg'), null)
+    assert.equal(await fromLibrary(null), null)
   })
 })

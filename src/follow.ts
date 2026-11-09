@@ -130,8 +130,12 @@ export function createFollower(d: FollowerDeps): Follower {
       if (ext !== e)
         return
       ext = null
-      // Our own end() (a new video, switched off) says 'ended'; the user's
-      // Stop following, or another video in playhound, is theirs to undo.
+      // Our own end() (a new video, switched off) says 'ended', and we end
+      // ours before starting another, so our own restarts never get here.
+      // The user's Stop following ('stopped'), another video in playhound
+      // ('replaced'), or another plugin's external playback taking over
+      // ('restarted') are theirs to undo: not followed again until the
+      // headset opens another video, or Follow again.
       if (reason !== 'ended') {
         phase = 'dismissed'
         changed()

@@ -17,6 +17,9 @@ const video = (id: string, o: Partial<LibraryVideo> = {}): LibraryVideo => ({
   title: id.replace(/\.[^.]+$/, ''),
   path: `Videos/${id}`,
   durationS: 600,
+  width: 1280,
+  height: 640,
+  sizeBytes: 1000,
   hasScript: true,
   starred: false,
   intensity: null,
@@ -30,12 +33,13 @@ const video = (id: string, o: Partial<LibraryVideo> = {}): LibraryVideo => ({
   ...o,
 })
 
-interface Session { opts: ExternalPlaybackOptions, updates: { at: number, time: number, playing: boolean, rate?: number }[], ended: string | null, fire: (r: 'stopped' | 'replaced' | 'ended') => void }
+interface Session { opts: ExternalPlaybackOptions, updates: { at: number, time: number, playing: boolean, rate?: number }[], ended: string | null, fire: (r: 'stopped' | 'replaced' | 'restarted' | 'ended') => void }
 
 function makeCtx(settings: Record<string, unknown>, library: LibraryVideo[]) {
   const sessions: Session[] = []
   let current: Session | null = null
   let handler: HttpHandler | null = null
+  let claimed: string[] = []
   const base = 'http://192.168.1.10:7112/plugins/phvr/'
   const stored = new Map<string, unknown>()
   const settingFns = new Set<(v: Record<string, unknown>) => void>()
@@ -67,13 +71,15 @@ function makeCtx(settings: Record<string, unknown>, library: LibraryVideo[]) {
       onChange: () => () => {},
       fingerprint: async (id: string) => `v1:600:${id}`,
       info: async () => ({ tags: [], sourceUrl: null, creator: null, scriptFiles: [] }),
+      media: async () => ({ durationS: 600, width: 1280, height: 640, sizeBytes: 1000 }),
+      thumbnail: async () => 'data:image/jpeg;base64,/9j/4AAQ',
       mediaUrl: async (id: string) => `http://192.168.1.10:7112/ph-files/tok${library.findIndex(v => v.id === id)}abcdefghijklmnopq/${encodeURIComponent(id)}`,
       scriptUrl: async (id: string) => `http://192.168.1.10:7112/ph-files/scr${library.findIndex(v => v.id === id)}abcdefghijklmnopq/${encodeURIComponent(id)}.funscript`,
     },
     playback: {
       async external(opts: ExternalPlaybackOptions): Promise<ExternalPlayback | null> {
-        current?.fire('replaced')
-        const ends = new Set<(r: 'stopped' | 'replaced' | 'ended') => void>()
+        current?.fire('restarted')
+        const ends = new Set<(r: 'stopped' | 'replaced' | 'restarted' | 'ended') => void>()
         const s: Session = {
           opts,
           updates: [],
@@ -112,11 +118,14 @@ function makeCtx(settings: Record<string, unknown>, library: LibraryVideo[]) {
     },
     http: {
       available: true,
-      async serve(h: HttpHandler) {
+      async serve(h: HttpHandler, opts?: { rootAliases?: string[] }) {
         handler = h
+        claimed = opts?.rootAliases ?? []
         return base
       },
       url: () => (handler ? base : null),
+      urls: () => (handler ? [base, 'http://10.5.0.2:7112/plugins/phvr/'] : []),
+      rootAliases: () => (handler ? claimed : []),
       stop: () => void (handler = null),
     },
     log: () => {},
@@ -127,6 +136,7 @@ function makeCtx(settings: Record<string, unknown>, library: LibraryVideo[]) {
     current: () => current,
     handler: () => handler,
     closeSockets: () => sockets.forEach(s => s.close()),
+    claimed: () => claimed,
   }
 }
 
@@ -226,11 +236,18 @@ describe('the plugin against a fake headset', () => {
     assert.equal(h.sessions[3].opts.video, 'Another Synthetic Clip.mp4')
   })
 
+  it('claims the short root paths', () => {
+    assert.deepEqual([...h.claimed()].sort(), ['deovr', 'heresphere'])
+  })
+
   it('serves the library to HereSphere and DeoVR', async () => {
     const hs = (await h.handler()!(req('/heresphere', 'POST', {})))!
     assert.equal(hs.headers!['HereSphere-JSON-Version'], '1')
     assert.deepEqual((hs.json as { library: { name: string }[] }).library.map(g => g.name), ['Scripted', 'Starred'])
     const deo = (await h.handler()!(req('/deovr', 'GET')))!
+    const thumb = (await h.handler()!(req('/thumb/Another%20Synthetic%20Clip.mp4.jpg', 'GET')))!
+    assert.ok(thumb.body instanceof Blob)
+    assert.equal((thumb.body as Blob).type, 'image/jpeg')
     assert.equal((deo.json as { scenes: { list: unknown[] }[] }).scenes[0].list.length, 2)
   })
 

@@ -3,6 +3,7 @@ import type { Config } from './settings'
 import type { HttpRequest, HttpResponse, LibraryVideo, LibraryVideoInfo } from './types'
 import { deoVrLibrary, deoVrVideo, HERESPHERE_HEADERS, hereSphereLibrary, hereSphereVideo } from './formats'
 import { servedToken, stem } from './match'
+import { playerAddress } from './addresses'
 import { helpPage } from './helpPage'
 
 /**
@@ -10,6 +11,9 @@ import { helpPage } from './helpPage'
  * http://<this computer>:<port>/plugins/phvr/:
  *
  *   /              a page saying what to open, for a normal browser
+ *
+ * playhound also routes the root paths /heresphere and /deovr here when it
+ * gave them to us (rootAliases), as /heresphere and /deovr: the same answers.
  *   /heresphere    HereSphere's web API: the library, then /heresphere/<id>
  *   /deovr         DeoVR's JSON: the library, then /deovr/<id>
  *   /thumb/<id>.jpg  a picture of the video
@@ -22,13 +26,17 @@ import { helpPage } from './helpPage'
 export interface ServerDeps {
   /** What ctx.http.serve resolved: http://…/plugins/phvr/ (with the slash). */
   base: () => string | null
+  /** The root paths playhound gave us (rootAliases): 'heresphere', 'deovr'. */
+  aliases?: () => readonly string[]
   list: () => Promise<LibraryVideo[]>
   config: () => Config
   mediaUrl: (id: string) => Promise<string | null>
   scriptUrl: (id: string, axis?: string) => Promise<string | null>
   info: (id: string) => Promise<LibraryVideoInfo | null>
-  /** A JPEG of the video, or null. */
-  thumbnail: (id: string) => Promise<Blob | null>
+  /** A JPEG of the video, an address to send the headset to for one, or null. */
+  thumbnail: (id: string) => Promise<Blob | string | null>
+  /** Its length and sizes, reading the file when unknown (library.media); optional. */
+  media?: (id: string) => Promise<{ durationS: number | null, width: number | null, height: number | null, sizeBytes: number | null } | null>
   /** Someone asked for something (the panel shows the headset found us). */
   onRequest?: (what: 'heresphere' | 'deovr' | 'page' | 'video' | 'thumb', remote: string) => void
   log?: (...a: unknown[]) => void
@@ -144,6 +152,9 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
       title: v.title,
       fileName: v.id,
       durationS: v.durationS,
+      width: v.width ?? null,
+      height: v.height ?? null,
+      sizeBytes: v.sizeBytes ?? null,
       starred: v.starred,
       tags: v.tags,
       playlists: v.playlists,
@@ -170,6 +181,21 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
     return { mediaUrl: mediaUrl && viaHost(mediaUrl, host), scripts }
   }
 
+  /** A video's facts with what library.media reads from the file (length, sizes) when the list doesn't know them. */
+  async function fuller(v: LibraryVideo, kind: 'heresphere' | 'deovr', base: string): Promise<VideoFacts> {
+    const f = facts(v, kind, base)
+    if (d.media && (f.durationS === null || f.width === null || f.height === null || f.sizeBytes === null)) {
+      const m = await d.media(v.id).catch(() => null)
+      if (m) {
+        f.durationS ??= m.durationS
+        f.width ??= m.width
+        f.height ??= m.height
+        f.sizeBytes ??= m.sizeBytes
+      }
+    }
+    return f
+  }
+
   /** One of the shared videos, by the key in a path; null when it isn't shared (or gone). */
   async function sharedVideo(k: string): Promise<LibraryVideo | null> {
     const id = unkey(k)
@@ -189,7 +215,10 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
 
     if (path === '/') {
       d.onRequest?.('page', req.remote)
-      return { headers: { 'Content-Type': 'text/html; charset=utf-8' }, body: helpPage(base, (await shared()).length) }
+      return { headers: { 'Content-Type': 'text/html; charset=utf-8' }, body: helpPage({
+        heresphere: playerAddress(base, 'heresphere', d.aliases?.() ?? []),
+        deovr: playerAddress(base, 'deovr', d.aliases?.() ?? []),
+      }, (await shared()).length) }
     }
 
     if (parts[0] === 'heresphere') {
@@ -210,7 +239,7 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
       catch {}
       // HereSphere listing the library says it needs no media.
       const withMedia = body?.needsMediaSource !== false
-      return { headers: HERESPHERE_HEADERS, json: hereSphereVideo(facts(v, 'heresphere', base), await mediaOf(v, withMedia, host)) }
+      return { headers: HERESPHERE_HEADERS, json: hereSphereVideo(await fuller(v, 'heresphere', base), await mediaOf(v, withMedia, host)) }
     }
 
     if (parts[0] === 'deovr') {
@@ -224,7 +253,7 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
       if (!v)
         return null
       d.onRequest?.('video', req.remote)
-      return { json: deoVrVideo(facts(v, 'deovr', base), await mediaOf(v, true, host)) }
+      return { json: deoVrVideo(await fuller(v, 'deovr', base), await mediaOf(v, true, host)) }
     }
 
     if (parts[0] === 'thumb' && parts.length === 2 && d.config().thumbnails) {
@@ -232,10 +261,13 @@ export function createLibraryServer(d: ServerDeps): LibraryServer {
       if (!v)
         return null
       d.onRequest?.('thumb', req.remote)
-      const jpg = await d.thumbnail(v.id).catch(() => null)
-      if (!jpg)
+      const t = await d.thumbnail(v.id).catch(() => null)
+      if (!t)
         return null
-      return { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=86400' }, body: jpg }
+      // A provided video's picture lives at its source.
+      if (typeof t === 'string')
+        return { status: 302, headers: { 'Location': t, 'Cache-Control': 'max-age=3600' } }
+      return { headers: { 'Content-Type': t.type || 'image/jpeg', 'Cache-Control': 'max-age=86400' }, body: t }
     }
     return null
   }

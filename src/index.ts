@@ -4,6 +4,7 @@ import type { Pick } from './match'
 import type { Model, Visit } from './panel'
 import type { Config } from './settings'
 import type { LibraryVideo, PluginContext } from './types'
+import { ROOT_PATHS } from './addresses'
 import { createFollower } from './follow'
 import { createLink } from './link'
 import { fileKey, matchVideo } from './match'
@@ -76,17 +77,27 @@ export default function activate(ctx: PluginContext) {
 
   // ─── The library in the headset ────────────────────────────────────────
   let base: string | null = null
+  /** The root paths playhound gave us (/heresphere, /deovr). */
+  let aliases: string[] = []
   let shareError: string | null = null
   let sharedCount: number | null = null
   let lastVisit: Visit | null = null
-  const thumbs = createThumbnails({ mediaUrl: id => ctx.library.mediaUrl(id), storage: ctx.storage, log: ctx.log })
+  // The library's own thumbnails; the frame grab stays as a fallback for a playhound without library.thumbnail.
+  const thumbs = createThumbnails({
+    thumbnail: typeof ctx.library.thumbnail === 'function' ? id => ctx.library.thumbnail(id) : undefined,
+    mediaUrl: id => ctx.library.mediaUrl(id),
+    storage: ctx.storage,
+    log: ctx.log,
+  })
   const server = createLibraryServer({
     base: () => base,
+    aliases: () => aliases,
     list: library,
     config: () => cfg,
     mediaUrl: id => ctx.library.mediaUrl(id),
     scriptUrl: (id, axis) => ctx.library.scriptUrl(id, axis),
     info: id => ctx.library.info(id),
+    media: typeof ctx.library.media === 'function' ? id => ctx.library.media(id) : undefined,
     thumbnail: async id => thumbs.get(id, (await library()).find(v => v.id === id)?.title ?? id),
     onRequest(what, remote) {
       const prev = lastVisit
@@ -107,7 +118,7 @@ export default function activate(ctx: PluginContext) {
       return
     if (cfg.share && !base) {
       try {
-        base = await ctx.http.serve(req => server.handle(req))
+        base = await ctx.http.serve(req => server.handle(req), { rootAliases: ROOT_PATHS })
         shareError = base ? null : "playhound's network server isn't running"
       }
       catch (err) {
@@ -118,6 +129,7 @@ export default function activate(ctx: PluginContext) {
       ctx.http.stop()
       base = null
     }
+    aliases = base ? ctx.http.rootAliases() : []
     await refreshShared()
   }
 
@@ -250,6 +262,16 @@ export default function activate(ctx: PluginContext) {
     },
     get base() {
       return base
+    },
+    // Read live: adapters come and go (Wi-Fi reconnects, a VPN starts).
+    get urls() {
+      if (!base)
+        return []
+      const all = ctx.http.urls()
+      return all.length ? all : [base]
+    },
+    get aliases() {
+      return base ? ctx.http.rootAliases() : []
     },
     get shareError() {
       return shareError

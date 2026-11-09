@@ -2,9 +2,9 @@
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]!)
 
-export function helpPage(base: string, count: number): string {
-  const hs = `${base}heresphere`
-  const deo = `${base}deovr`
+export function helpPage(addr: { heresphere: string, deovr: string }, count: number): string {
+  const hs = addr.heresphere
+  const deo = addr.deovr
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>playhound library</title>

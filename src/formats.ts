@@ -36,6 +36,10 @@ export interface VideoFacts {
   /** The file name, for guessing its VR format. */
   fileName: string
   durationS: number | null
+  /** The picture's size and the file's, when known (library.list, or library.media). */
+  width: number | null
+  height: number | null
+  sizeBytes: number | null
   starred: boolean
   tags: string[]
   playlists: string[]
@@ -84,7 +88,7 @@ export function hereSphereVideo(v: VideoFacts, m: VideoMedia | null) {
       ...v.playlists.map(p => ({ name: `Playlist:${p}` })),
     ],
     media: m?.mediaUrl
-      ? [{ name: 'Original', sources: [{ resolution: 0, height: 0, width: 0, size: 0, url: m.mediaUrl }] }]
+      ? [{ name: 'Original', sources: [{ resolution: v.height ?? 0, height: v.height ?? 0, width: v.width ?? 0, size: v.sizeBytes ?? 0, url: m.mediaUrl }] }]
       : [],
     writeFavorite: false,
     writeRating: false,
@@ -134,7 +138,10 @@ export function deoVrVideo(v: VideoFacts, m: VideoMedia) {
     stereoMode: f.stereoMode,
     videoLength: Math.round(v.durationS ?? 0),
     thumbnailUrl: v.thumbUrl ?? '',
-    encodings: m.mediaUrl ? [{ name: 'h264', videoSources: [{ resolution: 1080, url: m.mediaUrl }] }] : [],
+    // DeoVR labels the quality by `resolution` (the picture's height); 1080 when it isn't known.
+    encodings: m.mediaUrl
+      ? [{ name: 'h264', videoSources: [{ resolution: v.height || 1080, ...(v.height && v.width ? { height: v.height, width: v.width } : {}), ...(v.sizeBytes ? { size: v.sizeBytes } : {}), url: m.mediaUrl }] }]
+      : [],
     timeStamps: [],
     ...(m.scripts.length ? { fleshlight: m.scripts.map(s => ({ title: s.name, url: s.url })) } : {}),
     fullVideoReady: true,

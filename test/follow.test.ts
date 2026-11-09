@@ -9,18 +9,18 @@ import { sleep } from './nodeSocket.ts'
 
 /** playback.external as playhound behaves: one session at a time, a new one replaces the last. */
 function fakePlayhound() {
-  const sessions: { opts: ExternalPlaybackOptions, updates: { time: number, playing: boolean, rate?: number }[], ended: string | null, fire: (r: 'stopped' | 'replaced' | 'ended') => void }[] = []
+  const sessions: { opts: ExternalPlaybackOptions, updates: { time: number, playing: boolean, rate?: number }[], ended: string | null, fire: (r: 'stopped' | 'replaced' | 'restarted' | 'ended') => void }[] = []
   let current: (typeof sessions)[number] | null = null
   async function external(opts: ExternalPlaybackOptions): Promise<ExternalPlayback | null> {
     if (opts.video === 'refuse')
       return null
-    current?.fire('replaced')
-    const ends = new Set<(r: 'stopped' | 'replaced' | 'ended') => void>()
+    current?.fire('restarted')
+    const ends = new Set<(r: 'stopped' | 'replaced' | 'restarted' | 'ended') => void>()
     const s = {
       opts,
       updates: [] as { time: number, playing: boolean, rate?: number }[],
       ended: null as string | null,
-      fire(r: 'stopped' | 'replaced' | 'ended') {
+      fire(r: 'stopped' | 'replaced' | 'restarted' | 'ended') {
         if (s.ended)
           return
         s.ended = r
@@ -119,6 +119,29 @@ describe('following the headset', () => {
     assert.equal(ph.sessions.length, 2)
     assert.equal(last().phase, 'following')
     assert.equal(ph.sessions[1].updates.length, 1)
+  })
+
+  it('another plugin\'s external playback taking over is respected too', async () => {
+    const { f, ph, last } = setup()
+    f.report(st('/sdcard/a.mp4', 1))
+    await sleep(10)
+    ph.sessions[0].fire('restarted')
+    assert.equal(last().phase, 'dismissed')
+    f.report(st('/sdcard/a.mp4', 2))
+    await sleep(10)
+    assert.equal(ph.sessions.length, 1)
+  })
+
+  it('our own restart (a new video) never counts as the user\'s', async () => {
+    const { f, ph, views } = setup()
+    f.report(st('/sdcard/a.mp4', 1))
+    await sleep(10)
+    f.report(st('/sdcard/b.mp4', 1))
+    await sleep(10)
+    // playhound ends the old one as 'restarted' when a new one starts; we ended it first anyway.
+    ph.sessions[0].fire('restarted')
+    assert.equal(views.some(v => v.phase === 'dismissed'), false)
+    assert.equal(ph.sessions[1].opts.video, 'b.mp4')
   })
 
   it('playing something else in playhound counts as the user\'s too', async () => {
