@@ -4,7 +4,7 @@
 
 <!-- Screenshot: add docs/panel.webp (the VR headset panel, following a video) and link it here. -->
 
-Needs the playhound **2.2** desktop app, and the headset on the same network as the computer. In a browser tab the panel says so: a page can't open the connection the headset needs, nor answer the headset.
+Needs the playhound **2.2.8** desktop app or newer (plugin API 7), and the headset on the same network as the computer. In a browser tab the panel says so: a page can't open the connection the headset needs, nor answer the headset.
 
 ## Install
 
@@ -28,6 +28,7 @@ From then on your devices follow the headset: play, pause, seeking and the speed
 - **playhound's own controls** (play, pause, seek, speed) go to the headset, which then follows; its next report is what counts. DeoVR documents this. HereSphere doesn't, but it takes the same messages from MultiFunPlayer.
 - **Stop following**, in the player, or playing something else in playhound, is respected: that video isn't followed again until the headset opens another one, or you click **Follow again** in the panel (also in the command palette, Ctrl K).
 - **When the headset goes away** (it sleeps, leaves the Wi-Fi, the player closes) the device stops within a second, and the plugin keeps trying to reconnect, waiting a little longer each time, up to 30 seconds. When it's back, so is the following.
+- **Achievements** of its own, in playhound's **Stats → Achievements**: the first video followed, 10 and 50 different videos followed, 10 hours followed while the headset plays, and opening your library in the headset's player.
 
 ### Settings
 
@@ -61,7 +62,7 @@ While the plugin is on and playhound is open, the headset can browse your librar
 
 - It connects only to the address you type, and only on your local network (playhound refuses anything else).
 - The library is answered only on your local network, only while the plugin is on and **Share the library** is on, and only what you chose to share.
-- It stores its settings and your picks (headset file → library video) in playhound. It sends nothing anywhere else.
+- It stores its settings, your picks (headset file → library video) and, for the achievements, which videos it followed and for how long, in playhound. It sends nothing anywhere else.
 
 ## Build
 

@@ -44,6 +44,8 @@ function makeCtx(settings: Record<string, unknown>, library: LibraryVideo[]) {
   const stored = new Map<string, unknown>()
   const settingFns = new Set<(v: Record<string, unknown>) => void>()
   const sockets: { close: () => void }[] = []
+  const earned: string[] = []
+  const progress: Record<string, number> = {}
   const ctx = {
     manifest: { id: 'phvr', name: 'VR headset', version: '0.1.0' },
     settings: {
@@ -128,9 +130,21 @@ function makeCtx(settings: Record<string, unknown>, library: LibraryVideo[]) {
       rootAliases: () => (handler ? claimed : []),
       stop: () => void (handler = null),
     },
+    achievements: {
+      define() {},
+      unlock: (id: string) => {
+        earned.push(id)
+        return true
+      },
+      progress: (id: string, n: number) => void (progress[id] = n),
+      unlocked: () => ({}),
+    },
     log: () => {},
   }
   return {
+    earned,
+    progress,
+    stored,
     ctx: ctx as unknown as PluginContext,
     sessions,
     current: () => current,
@@ -167,6 +181,7 @@ describe('the plugin against a fake headset', () => {
     assert.equal(s.opts.video, 'Synthetic Test Clip_180_LR.mp4')
     assert.equal(s.opts.label, 'DeoVR')
     assert.equal(s.opts.duration, 600)
+    assert.deepEqual(h.earned, ['first-follow'])
     // The clock it feeds is the fake's.
     const u = s.updates.at(-1)!
     assert.equal(u.playing, true)
@@ -212,6 +227,8 @@ describe('the plugin against a fake headset', () => {
     await until(() => h.sessions.length === 2, 3000, 'second video')
     assert.equal(h.sessions[0].ended, 'ended')
     assert.equal(h.sessions[1].opts.video, 'Another Synthetic Clip.mp4')
+    assert.equal(h.progress['followed-10'], 2)
+    assert.deepEqual((h.stored.get('feats') as { followed: string[] }).followed, lib.map(v => v.id))
   })
 
   it('respects Stop following until the headset moves on', async () => {
@@ -249,6 +266,7 @@ describe('the plugin against a fake headset', () => {
     assert.ok(thumb.body instanceof Blob)
     assert.equal((thumb.body as Blob).type, 'image/jpeg')
     assert.equal((deo.json as { scenes: { list: unknown[] }[] }).scenes[0].list.length, 2)
+    assert.ok(h.earned.includes('browsed'))
   })
 
   it('switched off, it lets go of the headset', async () => {

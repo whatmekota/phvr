@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+For playhound 2.2.8 and newer (plugin API 7), in the desktop app.
+
+- **Achievements**, 5 of them, in Stats → Achievements: the first video followed, 10 and 50 different videos followed, 10 hours followed while the headset plays (counted a minute at a time), and the headset's player opening your library. Counted from this version on.
+- The plugin contract (`src/types.ts`) is playhound's API 7 copy.
+
 ## 0.1.0
 
 First version, for playhound 2.2 and newer (plugin API 3), in the desktop app.

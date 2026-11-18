@@ -1,9 +1,11 @@
+import type { Feats } from './achievements'
 import type { FollowView } from './follow'
 import type { Link, LinkState } from './link'
 import type { Pick } from './match'
 import type { Model, Visit } from './panel'
 import type { Config } from './settings'
 import type { LibraryVideo, PluginContext } from './types'
+import { createTrophies, emptyFeats, mergeFeats, readFeats } from './achievements'
 import { ROOT_PATHS } from './addresses'
 import { createFollower } from './follow'
 import { createLink } from './link'
@@ -25,12 +27,17 @@ import { createThumbnails } from './thumbs'
  * 2. Serves the library to the headset in HereSphere's web API and DeoVR's
  *    JSON, from playhound's LAN server, so it can be browsed and played
  *    there, scripts included.
+ *
+ * Following videos, the hours followed and browsing the library from the
+ * headset earn the plugin's own achievements (achievements.ts).
  */
 
 const ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5C2 4.7 2.7 4 3.5 4h9c.8 0 1.5.7 1.5 1.5v4.2c0 .8-.7 1.5-1.5 1.5h-2.3L9 9.4a1.2 1.2 0 0 0-2 0l-1.2 1.8H3.5c-.8 0-1.5-.7-1.5-1.5z"/><circle cx="5.3" cy="7.5" r="1.1"/><circle cx="10.7" cy="7.5" r="1.1"/></svg>'
 
 /** After this long without the headset, playhound stops showing its video as followed. */
 const FORGET_AFTER_MS = 60_000
+/** How often the time followed is counted, for the achievements. */
+const MINUTE_MS = 60_000
 
 export default function activate(ctx: PluginContext) {
   ctx.ui.style(CSS)
@@ -59,6 +66,30 @@ export default function activate(ctx: PluginContext) {
     videos = null
     void refreshShared()
   })
+
+  // ─── Achievements ──────────────────────────────────────────────────────
+  const trophies = createTrophies(ctx.achievements, (...args) => ctx.log(...args))
+  let feats: Feats = emptyFeats()
+  /** Read from storage yet; until then a change is kept in memory and added to what was kept. */
+  let featsRead = false
+  let featsPending = false
+  const saveFeats = () => void ctx.storage.set('feats', feats).catch(err => ctx.log('achievement counts not kept:', err))
+  void ctx.storage.get('feats').catch(() => undefined).then((raw) => {
+    feats = mergeFeats(readFeats(raw), feats)
+    featsRead = true
+    trophies.sync(feats)
+    if (featsPending)
+      saveFeats()
+  })
+  function note(change: (f: Feats) => void) {
+    change(feats)
+    if (!featsRead) {
+      featsPending = true
+      return
+    }
+    trophies.sync(feats)
+    saveFeats()
+  }
 
   // ─── Picks the user made, by headset path ──────────────────────────────
   let picks: Record<string, Pick> = {}
@@ -100,6 +131,8 @@ export default function activate(ctx: PluginContext) {
     media: typeof ctx.library.media === 'function' ? id => ctx.library.media(id) : undefined,
     thumbnail: async id => thumbs.get(id, (await library()).find(v => v.id === id)?.title ?? id),
     onRequest(what, remote) {
+      if ((what === 'heresphere' || what === 'deovr') && !feats.browsed)
+        note(f => void (f.browsed = true))
       const prev = lastVisit
       lastVisit = { what, remote, at: Date.now() }
       if (!prev || prev.what !== what || prev.remote !== remote || Date.now() - prev.at > 5000)
@@ -165,6 +198,11 @@ export default function activate(ctx: PluginContext) {
     fingerprint: id => ctx.library.fingerprint(id),
     onChange(v) {
       followView = v
+      if (v.phase === 'following') {
+        const key = v.videoId ?? (v.status?.path ? `path:${fileKey(v.status.path)}` : null)
+        if (key && !feats.followed.includes(key))
+          note(f => void f.followed.push(key))
+      }
       emit()
     },
     log: ctx.log,
@@ -331,11 +369,18 @@ export default function activate(ctx: PluginContext) {
     run: () => void follower.again(),
   })
 
+  // Each minute that finds the headset playing a followed video counts as a minute followed.
+  const minuteTimer = setInterval(() => {
+    if (followView.phase === 'following' && followView.status?.playing && linkState.kind === 'connected')
+      note(f => void f.minutes++)
+  }, MINUTE_MS)
+
   void syncServing()
   if (cfg.autoConnect && cfg.host)
     connect()
 
   return () => {
+    clearInterval(minuteTimer)
     listeners.clear()
     if (forgetTimer)
       clearTimeout(forgetTimer)

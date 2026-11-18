@@ -1,12 +1,12 @@
 {
   "id": "phvr",
   "name": "VR headset",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Follow a video playing in HereSphere or DeoVR and drive your devices from playhound, and browse your library from the headset.",
   "icon": "icon.png",
   "author": "whatmekota",
   "main": "dist/index.js",
-  "api": 3,
+  "api": 7,
   "permissions": [
     "library",
     "external",
@@ -26,5 +26,5 @@
     "timestamp",
     "library"
   ],
-  "minPlayhound": "2.2.0"
+  "minPlayhound": "2.2.8"
 }
